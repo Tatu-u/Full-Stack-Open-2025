@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
+import axios from 'axios'
+import phonebook from './services/phonebook'
+
 
 const Filter = ({onFilterChange}) =>{
   return (
@@ -26,21 +29,23 @@ const AddPersonForm = (props) =>{
   )
 }
 
-const People = ({filteredPersons}) => {
+const People = ({filteredPersons, onDelete, onClickName}) => {
   return(
     <ul>
-        {filteredPersons.map(person => <li key={person.id}>{person.name} - {person.number}</li>)}
+        {filteredPersons.map(person => <li onClick={() => onClickName(person.name, person.number)} key={person.id}>{person.name} - {person.number} <button onClick={()=> onDelete(person.id)}>del</button></li>)}
     </ul>
   )
 }
 
 const App = () => {
-  const [persons, setPersons] = useState([
-    { name: 'Arto Hellas', number: '040-123456', id: 1 },
-    { name: 'Ada Lovelace', number: '39-44-5323523', id: 2 },
-    { name: 'Dan Abramov', number: '12-43-234345', id: 3 },
-    { name: 'Mary Poppendieck', number: '39-23-6423122', id: 4 }
-  ]) 
+  const [persons, setPersons] = useState([])
+
+  const fetchPersons = () => {
+    phonebook.getAll().then(res => setPersons(res))
+  }
+
+  useEffect(fetchPersons, [])
+
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   
@@ -56,27 +61,53 @@ const App = () => {
 
     e.preventDefault()    
     
+    //Update the number if name exists
     if (persons.some(person => person.name.toLowerCase() === newName.toLowerCase())) {
-      alert(newName + ' is already on the list!')
+      const toUpdate = window.confirm(`${newName} is already on the list, do you want to update their number?`)
+      if (!toUpdate) return
+
+      const personToUpdate = persons.find(person => person.name.toLowerCase() === newName.toLowerCase())
+      const updatedPerson = {...personToUpdate, number: newNumber}
+      phonebook.updatePerson(personToUpdate.id, updatedPerson)
+      .then(updatedPerson => setPersons(persons.map(person => person.id === updatedPerson.id ? updatedPerson : person)))
+      
+      setNewName('')
+      setNewNumber('')
+
       return
     }
 
-    if (persons.some(person => person.number === newNumber)) {
-      alert(newNumber + ' is already on the list!')
-      return
-    }
 
     const newPerson = {
       name: newName,
-      number: newNumber,
-      id: persons.length + 1
+      number: newNumber
     }
-        
-    setPersons(persons.concat(newPerson))
+
+    phonebook.createNew(newPerson).then(newPerson => setPersons(persons.concat(newPerson)))
+
     setNewName('')
     setNewNumber('')
 
   }
+
+  const onDelete = (id) =>{
+    const personToRemove = persons.find(person => person.id === id)
+    const toDelete = window.confirm(`are you sure you want to remove ${personToRemove.name}?`)
+
+    //if confirmation false just return
+    if(!toDelete) return
+
+    phonebook.deletePerson(id)
+    .then(()=>setPersons(persons.filter(person => person.id !== id)))
+    
+  }
+
+  //for easier editing
+  const onClickName = (name, number) =>{
+    setNewName(name)
+    setNewNumber(number)
+  }
+  
 
   return (
     <div>
@@ -86,7 +117,7 @@ const App = () => {
       <AddPersonForm OnNameSubmit={OnNameSubmit} OnNameChange={OnNameChange} OnNumberChange={OnNumberChange} newName={newName} newNumber={newNumber}/>
 
       <h3>Numbers</h3>
-      <People filteredPersons={filteredPersons} />
+      <People onClickName={onClickName} onDelete={onDelete} filteredPersons={filteredPersons} />
 
       
     </div>
